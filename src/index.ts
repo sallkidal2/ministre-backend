@@ -1,13 +1,18 @@
 // Only load vibecode proxy in development (not on Railway/production)
-if (process.env.NODE_ENV !== "production" && !process.env.RAILWAY_ENVIRONMENT) {
-  import("@vibecodeapp/proxy").catch(() => {});
+const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
+if (!isRailway) {
+  try {
+    require("@vibecodeapp/proxy");
+  } catch (e) {
+    // Ignore if not available
+  }
 }
+
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { StatusCode } from "hono/utils/http-status";
 import "./env";
 import { logger } from "hono/logger";
-import { createVibecodeSDK, StorageError } from "@vibecodeapp/backend-sdk";
 
 // Import routes
 import { authRouter } from "./routes/auth";
@@ -31,7 +36,6 @@ import { smsRouter } from "./routes/sms";
 import { agentsRouter } from "./routes/agents";
 
 const app = new Hono();
-const vibecode = createVibecodeSDK();
 
 // CORS middleware - validates origin against allowlist
 const allowed = [
@@ -62,40 +66,48 @@ app.use("*", logger());
 app.get("/health", (c) => c.json({ status: "ok" }));
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-// File upload endpoint
-app.post("/api/upload", async (c) => {
-  const formData = await c.req.formData();
-  const file = formData.get("file");
+// File upload endpoint - only available in Vibecode environment
+if (!isRailway) {
+  const { createVibecodeSDK, StorageError } = require("@vibecodeapp/backend-sdk");
+  const vibecode = createVibecodeSDK();
 
-  if (!file || !(file instanceof File)) {
-    return c.json({ error: { message: "Aucun fichier fourni" } }, 400);
-  }
+  app.post("/api/upload", async (c) => {
+    const formData = await c.req.formData();
+    const file = formData.get("file");
 
-  try {
-    const result = await vibecode.storage.upload(file);
-    return c.json({ data: result });
-  } catch (error) {
-    if (error instanceof StorageError) {
-      return c.json({ error: { message: error.message } }, (error.statusCode || 500) as StatusCode);
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: { message: "Aucun fichier fourni" } }, 400);
     }
-    return c.json({ error: { message: "Echec de l'upload" } }, 500);
-  }
-});
 
-// File delete endpoint
-app.delete("/api/files/:id", async (c) => {
-  const { id } = c.req.param();
-
-  try {
-    await vibecode.storage.delete(id);
-    return c.json({ data: { success: true } });
-  } catch (error) {
-    if (error instanceof StorageError) {
-      return c.json({ error: { message: error.message } }, (error.statusCode || 500) as StatusCode);
+    try {
+      const result = await vibecode.storage.upload(file);
+      return c.json({ data: result });
+    } catch (error: any) {
+      if (error instanceof StorageError) {
+        return c.json({ error: { message: error.message } }, (error.statusCode || 500) as StatusCode);
+      }
+      return c.json({ error: { message: "Echec de l'upload" } }, 500);
     }
-    return c.json({ error: { message: "Echec de la suppression" } }, 500);
-  }
-});
+  });
+
+  app.delete("/api/files/:id", async (c) => {
+    const { id } = c.req.param();
+
+    try {
+      await vibecode.storage.delete(id);
+      return c.json({ data: { success: true } });
+    } catch (error: any) {
+      if (error instanceof StorageError) {
+        return c.json({ error: { message: error.message } }, (error.statusCode || 500) as StatusCode);
+      }
+      return c.json({ error: { message: "Echec de la suppression" } }, 500);
+    }
+  });
+} else {
+  // Placeholder endpoints for Railway
+  app.post("/api/upload", (c) => c.json({ error: { message: "File upload not available in production" } }, 501));
+  app.delete("/api/files/:id", (c) => c.json({ error: { message: "File delete not available in production" } }, 501));
+}
 
 // Mount routes
 app.route("/api/auth", authRouter);
