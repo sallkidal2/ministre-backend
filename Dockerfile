@@ -2,11 +2,15 @@ FROM oven/bun:1
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json bun.lock* ./
+# Set Railway environment
+ENV RAILWAY_ENVIRONMENT=production
 
-# Install dependencies
-RUN bun install --frozen-lockfile
+# Copy production package.json (without Vibecode dependencies)
+COPY package.railway.json ./package.json
+COPY bun.lock* ./
+
+# Install dependencies (without frozen lockfile since package.json is modified)
+RUN bun install
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma
