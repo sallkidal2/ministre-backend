@@ -41,6 +41,7 @@ const allowed = [
   /^https:\/\/[a-z0-9-]+--[a-z0-9-]+\.netlify\.app$/,
   /^https:\/\/[a-z0-9-]+\.railway\.app$/,
   /^https:\/\/[a-z0-9-]+\.up\.railway\.app$/,
+  /^https:\/\/(www\.)?menefphub\.com$/,
 ];
 
 app.use(
