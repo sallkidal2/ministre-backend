@@ -8,7 +8,8 @@ const envSchema = z.object({
   // Server Configuration
   PORT: z.string().optional().default("3000"),
   NODE_ENV: z.string().optional(),
-  BACKEND_URL: z.url("BACKEND_URL must be a valid URL").default("http://localhost:3000"), // Set via the Vibecode enviroment at run-time
+  RAILWAY_ENVIRONMENT: z.string().optional(), // Set by Railway automatically
+  BACKEND_URL: z.string().optional().default("http://localhost:3000"), // Set via the Vibecode enviroment at run-time
 });
 
 /**

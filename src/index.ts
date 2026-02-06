@@ -1,4 +1,7 @@
-import "@vibecodeapp/proxy"; // DO NOT REMOVE OTHERWISE VIBECODE PROXY WILL NOT WORK
+// Only load vibecode proxy in development (not on Railway/production)
+if (process.env.NODE_ENV !== "production" && !process.env.RAILWAY_ENVIRONMENT) {
+  import("@vibecodeapp/proxy").catch(() => {});
+}
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { StatusCode } from "hono/utils/http-status";
