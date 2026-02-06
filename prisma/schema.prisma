@@ -1,0 +1,269 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Note: Actual data is stored in Supabase PostgreSQL
+// This schema is kept for local reference and Prisma client generation
+
+// User roles: SUPER_ADMIN, ADMIN_DEPARTMENT, MINISTER, PRIMATURE, PRESIDENCY
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  role         String   @default("ADMIN_DEPARTMENT") // SUPER_ADMIN, ADMIN_DEPARTMENT, MINISTER, PRIMATURE, PRESIDENCY, AGENT
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  isActive     Boolean  @default(false) // Account must be activated by admin
+  phone        String?  @unique
+  mustChangePassword Boolean @default(false) // True for agents on first login
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  alertsSent        Alert[]    @relation("AlertSender")
+  sessions          Session[]
+  messagesSent      Message[]  @relation("MessageSender")
+  messagesReceived  Message[]  @relation("MessageReceiver")
+  documentsUploaded Document[]
+  disbursements     Disbursement[]
+  validationsRequested ValidationRequest[] @relation("ValidationRequester")
+  validationsApproved  ValidationRequest[] @relation("ValidationApprover")
+  notifications        Notification[]
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique // ONEF, APJE, FIER, DNEMPLOI, ANPE, FAFPA, etc.
+  description String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users            User[]
+  projects         Project[]
+  news             News[]
+  alertsReceived   Alert[]    @relation("AlertReceiver")
+  messagesReceived Message[]  @relation("MessageToDepartment")
+  documents        Document[]
+}
+
+model Region {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique
+  coordinates String?  // JSON string for map coordinates
+
+  projects     Project[]
+  beneficiaries Beneficiary[]
+}
+
+model Sector {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+
+  projects     Project[]
+  beneficiaries Beneficiary[]
+}
+
+// Project status: PENDING_VALIDATION, IN_PROGRESS, COMPLETED, DELAYED, SUSPENDED, BLOCKED
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  departmentId    String
+  department      Department @relation(fields: [departmentId], references: [id])
+  regionId        String
+  region          Region @relation(fields: [regionId], references: [id])
+  sectorId        String
+  sector          Sector @relation(fields: [sectorId], references: [id])
+  budget          Float?
+  plannedBudget   Float?   // Planned budget for comparison with actual disbursements
+  startDate       DateTime?
+  endDate         DateTime?
+  progress        Int      @default(0) // 0-100
+  status          String   @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, DELAYED, SUSPENDED, BLOCKED
+  responsibleName String?
+  responsiblePhone String?
+  documents       String?  // JSON array
+  photos          String?  // JSON array
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  beneficiaries    Beneficiary[]
+  projectDocuments Document[]
+  milestones       Milestone[]
+  disbursements    Disbursement[]
+  validationRequests ValidationRequest[]
+}
+
+// Milestone status: PENDING, IN_PROGRESS, COMPLETED, DELAYED
+model Milestone {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  dueDate       DateTime?
+  completedDate DateTime?
+  status        String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, DELAYED
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  order         Int       @default(0) // For sorting milestones
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Disbursement category: EQUIPMENT, PERSONNEL, MATERIALS, SERVICES, OTHER
+model Disbursement {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String?
+  date        DateTime @default(now())
+  category    String   @default("OTHER") // EQUIPMENT, PERSONNEL, MATERIALS, SERVICES, OTHER
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  receiptUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Gender: MALE, FEMALE
+// AccompanimentStatus: ACTIVE, COMPLETED, SUSPENDED
+model Beneficiary {
+  id                  String   @id @default(cuid())
+  firstName           String
+  lastName            String
+  gender              String   // MALE, FEMALE
+  age                 Int?
+  phone               String?
+  regionId            String
+  region              Region @relation(fields: [regionId], references: [id])
+  sectorId            String
+  sector              Sector @relation(fields: [sectorId], references: [id])
+  projectId           String
+  project             Project @relation(fields: [projectId], references: [id])
+  accompanimentStatus String   @default("ACTIVE") // ACTIVE, COMPLETED, SUSPENDED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// News type: ACTIVITY, TRAINING, PROJECT, EVENT
+model News {
+  id           String   @id @default(cuid())
+  title        String
+  content      String
+  imageUrl     String?
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  type         String   @default("ACTIVITY") // ACTIVITY, TRAINING, PROJECT, EVENT
+  publishedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
+// Alert type: URGENT, REMINDER, REPORT_REQUEST, UNBLOCK_REQUEST
+model Alert {
+  id             String   @id @default(cuid())
+  title          String
+  message        String
+  fromUserId     String
+  fromUser       User @relation("AlertSender", fields: [fromUserId], references: [id])
+  toDepartmentId String?  // null = all departments
+  toDepartment   Department? @relation("AlertReceiver", fields: [toDepartmentId], references: [id])
+  type           String   @default("REMINDER") // URGENT, REMINDER, REPORT_REQUEST, UNBLOCK_REQUEST
+  isRead         Boolean  @default(false)
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+}
+
+// Session for simple auth
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+// Internal messaging between departments and users
+model Message {
+  id             String      @id @default(cuid())
+  subject        String
+  content        String
+  fromUserId     String
+  fromUser       User        @relation("MessageSender", fields: [fromUserId], references: [id])
+  toUserId       String?     // null = to department
+  toUser         User?       @relation("MessageReceiver", fields: [toUserId], references: [id])
+  toDepartmentId String?     // null = direct message to user
+  toDepartment   Department? @relation("MessageToDepartment", fields: [toDepartmentId], references: [id])
+  isRead         Boolean     @default(false)
+  readAt         DateTime?
+  parentId       String?     // for replies/threads
+  parent         Message?    @relation("MessageThread", fields: [parentId], references: [id])
+  replies        Message[]   @relation("MessageThread")
+  attachments    String?     // JSON array of attachment URLs
+  createdAt      DateTime    @default(now())
+}
+
+// ValidationRequest type: PROJECT_APPROVAL, BUDGET_INCREASE, UNBLOCK_REQUEST, STATUS_CHANGE
+// ValidationRequest status: PENDING, APPROVED, REJECTED
+model ValidationRequest {
+  id              String    @id @default(cuid())
+  type            String    // PROJECT_APPROVAL, BUDGET_INCREASE, UNBLOCK_REQUEST, STATUS_CHANGE
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requesterId     String
+  requester       User      @relation("ValidationRequester", fields: [requesterId], references: [id])
+  approverId      String?
+  approver        User?     @relation("ValidationApprover", fields: [approverId], references: [id])
+  comment         String    // Request reason
+  responseComment String?   // Approval/rejection reason
+  metadata        String?   // JSON field for additional data (e.g., new budget amount)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  respondedAt     DateTime?
+}
+
+// Notification type: VALIDATION_REQUEST, VALIDATION_RESPONSE, PROJECT_ALERT, SYSTEM
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // VALIDATION_REQUEST, VALIDATION_RESPONSE, PROJECT_ALERT, SYSTEM
+  title     String
+  message   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRead    Boolean  @default(false)
+  link      String?  // Optional URL to navigate to
+  createdAt DateTime @default(now())
+}
+
+// Document type: REPORT, ACTIVITY_REPORT, FINANCIAL_REPORT, OTHER
+model Document {
+  id           String      @id @default(cuid())
+  title        String
+  description  String?
+  fileUrl      String
+  fileType     String      // PDF, DOCX, XLSX, etc.
+  fileSize     Int         // in bytes
+  type         String      @default("REPORT") // REPORT, ACTIVITY_REPORT, FINANCIAL_REPORT, OTHER
+  departmentId String
+  department   Department  @relation(fields: [departmentId], references: [id])
+  uploadedById String
+  uploadedBy   User        @relation(fields: [uploadedById], references: [id])
+  projectId    String?     // optional link to project
+  project      Project?    @relation(fields: [projectId], references: [id])
+  isPublic     Boolean     @default(false) // visible to all departments
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
