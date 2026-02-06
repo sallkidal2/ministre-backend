@@ -1,18 +1,19 @@
-// Only load vibecode proxy in development (not on Railway/production)
-const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
-if (!isRailway) {
-  try {
-    require("@vibecodeapp/proxy");
-  } catch (e) {
-    // Ignore if not available
-  }
+// Detect Railway environment
+const isRailway = !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PROJECT_ID;
+
+if (isRailway) {
+  console.log("Running in Railway production mode");
 }
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { StatusCode } from "hono/utils/http-status";
-import "./env";
 import { logger } from "hono/logger";
+
+// Only load env validation in non-Railway environment
+if (!isRailway) {
+  require("./env");
+}
 
 // Import routes
 import { authRouter } from "./routes/auth";
